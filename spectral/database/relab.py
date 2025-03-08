@@ -1,21 +1,19 @@
 '''
-Code for reading and managing ASTER spectral library data.
+Code for reading and managing relab spectral library data.
 '''
 
 from __future__ import absolute_import, division, print_function, unicode_literals
-
-import numpy as np
 
 from spectral.utilities.python23 import IS_PYTHON3, tobytes, frombytes
 
 from .spectral_database import SpectralDatabase
 
 if IS_PYTHON3:
-    def readline(fin): return fin.readline()
-    def open_file(filename): return open(filename, encoding='iso-8859-1')
+    readline = lambda fin: fin.readline()
+    open_file = lambda filename: open(filename, encoding='iso-8859-1')
 else:
-    def readline(fin): return fin.readline().decode('iso-8859-1')
-    def open_file(filename): return open(filename)
+    readline = lambda fin: fin.readline().decode('iso-8859-1')
+    open_file = lambda filename: open(filename)
 
 table_schemas = [
     'CREATE TABLE Samples (SampleID INTEGER PRIMARY KEY, Name TEXT, Type TEXT, Class TEXT, SubClass TEXT, '
@@ -44,81 +42,43 @@ def read_pair(fin, num_lines=1):
 
 
 class Signature:
-    '''Object to store sample/measurement metadata, as well as wavelength-signatrure vectors.'''
+    '''Object to store sample/measurement metadata, as well as wavelength-signature vectors.'''
     def __init__(self):
         self.sample = {}
         self.measurement = {}
 
 
-def read_aster_file(filename):
-    '''Reads an ASTER 2.x spectrum file.'''
-    fin = open_file(filename)
+def read_relab_file(filename):
+    '''Reads a relab spectrum file.'''
+    with open_file(filename) as fin:
+        lines = [line.rstrip('\n') for line in fin]
 
     s = Signature()
 
-    # Number of lines per metadata attribute value
-    lpv = [1] * 8 + [2] + [6]
-
-    # A few files have an additional "Collected by" sample metadata field, which
-    # sometimes affects the number of header lines
-
-    haveCollectedBy = False
-    for i in range(30):
-        line = readline(fin).strip()
-        if line.find('Collected by:') >= 0:
-            haveCollectedBy = True
-        if line.startswith('Description:'):
-            descriptionLineNum = i
-        if line.startswith('Measurement:'):
-            measurementLineNum = i
-
-    if haveCollectedBy:
-        lpv = [1] * 10 + [measurementLineNum - descriptionLineNum]
-
-    # Read sample metadata
-    fin.seek(0)
-    for i in range(len(lpv)):
-        pair = read_pair(fin, lpv[i])
-        s.sample[pair[0].lower()] = pair[1]
-
-    # Read measurement metadata
-    lpv = [1] * 8 + [2]
-    for i in range(len(lpv)):
-        pair = read_pair(fin, lpv[i])
-        if len(pair) < 2:
-            print(pair)
-        s.measurement[pair[0].lower()] = pair[1]
-
     # Read signature spectrum
     pairs = []
-    for line in fin.readlines():
-        line = line.strip()
-        if len(line) == 0:
-            continue
-        pair = line.split()
-        nItems = len(pair)
+    # Start line counter
+    count = 0
+    # Extract ReLab ID and store it
+    relab_id = int(lines[0])
+    s.sample["relab_id"] = relab_id
+    s.measurement["relab_id"] = relab_id
+    count = count + 1
+    # Extract central wavelengths and reflectances
+    for c in range(count, len(lines)):
+        if (lines[c] != ""):
+            out = lines[c].strip().split("  ")
+            # Remove empty slots
+            out1 = list(filter(None, out))
+            #print(out1[0].strip(), out1[1].strip())
+            pair = [float(out1[0].strip()), float(out1[1].strip())]
+            pairs.append(pair)
+        else:
+            break
 
-        # Try to handle invalid values on signature lines
-        if nItems == 1:
-            # print('single item (%s) on signature line, %s' \
-            #       %  (pair[0], filename))
-            continue
-        elif nItems > 2:
-            print('more than 2 values on signature line,', filename)
-            continue
-        try:
-            x = float(pair[0])
-        except:
-            print('corrupt signature line,', filename)
-        if x == 0:
-            # print('Zero wavelength value', filename)
-            continue
-        elif x < 0:
-            print('Negative wavelength value,', filename)
-            continue
-
-        pairs.append(pair)
-
+    # Update line count
+    count = count + c
+    
     [x, y] = [list(v) for v in zip(*pairs)]
 
     # Make sure wavelengths are ascending
@@ -131,12 +91,83 @@ def read_aster_file(filename):
     s.measurement['last x value'] = x[-1]
     s.measurement['number of x values'] = len(x)
 
-    fin.close()
+    # Extract Metadata
+    # Read sample metadata
+        #pair = read_pair(fin, lpv[i])
+        #s.sample[pair[0].lower()] = pair[1]
+
+    # Read measurement metadata
+        #pair = read_pair(fin, lpv[i])
+        #s.measurement[pair[0].lower()] = pair[1]
+
+    m = []
+    description = ""
+    stage = None
+    
+    while (lines[count].strip() == ""):
+        count = count + 1
+
+    # Filename extraction
+    if(stage == None and lines[count].strip() != ""):
+        # Remove heading and trailing spaces
+        ml = lines[count].strip()
+        if '.ASC' in ml:
+            fname = ml.replace(' ','')
+            m.append(fname)
+            s.sample["name"] = str(fname)
+            #print("File NAME %s" % (fname))
+            stage = "ASC"
+    
+    count = count + 1
+    ml = lines[count].strip()
+
+    while (lines[count].strip() == ""):
+        count = count + 1
+
+    # Extract Material Name after Filename extraction
+    if(stage == "ASC" and lines[count].strip() != ""):
+        ml = lines[count].strip()
+        #print("Material NAME %s" % (ml))
+        s.measurement['name'] = str(ml)
+        stage = "name"
+    
+    count = count + 1
+    ml = lines[count].strip()
+
+    while (lines[count].strip() == ""):
+        count = count + 1
+
+    if(lines[count].strip() != ""):
+        ml = lines[count].strip()
+        # Extract seprately date and time
+        if 'Date' in ml:
+            date = ml.split('Time:')[0]
+            time = ml.split('Time:')[-1]
+            s.sample["date"] = date.replace('Date:',"").replace("  "," ").strip()
+            s.sample["time"] = time
+        # Extract Source and Detection Angles & Voltage
+        elif 'Volt' in ml:
+            volt = ml.split('Volt:')[-1]
+            dang = ml.split('Volt:')[-2]
+            dang1 = dang.split('Detect Ang:')[-1]
+            sang = dang.split('Detect Ang:')[-2]
+            s.measurement['source_angle'] = sang.replace("Source Ang:","").strip()
+            s.measurement['detect_angle'] = dang1.strip()
+            s.measurement['volt'] = volt
+        # All other cases
+        else:
+            description += ml + " " 
+            s.sample['description'] = description + " " + s.measurement['name']
+    else:
+        while (lines[count].strip() == ""):
+            count = count + 1
+        ml = lines[count].strip()
+
     return s
 
 
-class AsterDatabase(SpectralDatabase):
-    '''A relational database to manage ASTER spectral library data.'''
+class RelabDatabase(SpectralDatabase):
+    '''A relational database to manage relab spectral library data.'''
     schemas = table_schemas
 
     def _add_sample(self, name, sampleType, sampleClass, subClass,
@@ -172,8 +203,8 @@ class AsterDatabase(SpectralDatabase):
         return rowId
 
     @classmethod
-    def create(cls, filename, aster_data_dir=None):
-        '''Creates an ASTER relational database by parsing ASTER data files.
+    def create(cls, filename, relab_data_dir=None):
+        '''Creates an relab relational database by parsing RELAB data files.
 
         Arguments:
 
@@ -181,28 +212,28 @@ class AsterDatabase(SpectralDatabase):
 
                 Name of the new sqlite database file to create.
 
-            `aster_data_dir` (str):
+            `relab_data_dir` (str):
 
-                Path to the directory containing ASTER library data files. If
+                Path to the directory containing relab library data files. If
                 this argument is not provided, no data will be imported.
 
         Returns:
 
-            An :class:`~spectral.database.AsterDatabase` object.
+            An :class:`~spectral.database.RelabDatabase` object.
 
         Example::
 
-            >>> AsterDatabase.create("aster_lib.db", "/CDROM/ASTER2.0/data")
+            >>> RelabDatabase.create("relab_lib.db", "/STORAGE/ReLab/data")
 
         This is a class method (it does not require instantiating an
-        AsterDatabase object) that creates a new database by parsing all of the
-        files in the ASTER library data directory.  Normally, this should only
+        RelabDatabase object) that creates a new database by parsing all of the
+        files in the relab library data directory.  Normally, this should only
         need to be called once.  Subsequently, a corresponding database object
-        can be created by instantiating a new AsterDatabase object with the
+        can be created by instantiating a new RelabDatabase object with the
         path the database file as its argument.  For example::
 
-            >>> from spectral.database.aster import AsterDatabase
-            >>> db = AsterDatabase("aster_lib.db")
+            >>> from spectral.database.relab import RelabDatabase
+            >>> db = RelabDatabase("relab_lib.db")
         '''
         import os
         if os.path.isfile(filename):
@@ -211,8 +242,8 @@ class AsterDatabase(SpectralDatabase):
         db._connect(filename)
         for schema in cls.schemas:
             db.cursor.execute(schema)
-        if aster_data_dir:
-            db._import_files(aster_data_dir)
+        if relab_data_dir:
+            db._import_files(relab_data_dir)
         return db
 
     def __init__(self, sqlite_filename=None):
@@ -227,7 +258,7 @@ class AsterDatabase(SpectralDatabase):
 
         Returns:
 
-            An :class:`~spectral.AsterDatabase` connected to the database.
+            An :class:`~spectral.RelabDatabase` connected to the database.
         '''
         from spectral.io.spyfile import find_file_path
         if sqlite_filename:
@@ -237,11 +268,12 @@ class AsterDatabase(SpectralDatabase):
             self.cursor = None
 
     def read_file(self, filename):
-        return read_aster_file(filename)
+        return read_relab_file(filename)
 
     def _import_files(self, data_dir, ignore=bad_files):
-        '''Read each file in the ASTER library and convert to AVIRIS bands.'''
+        '''Read each file in the relab library and convert to AVIRIS bands.'''
         from glob import glob
+        import numpy
         import os
 
         if not os.path.isdir(data_dir):
@@ -254,47 +286,54 @@ class AsterDatabase(SpectralDatabase):
         numFiles = 0
         numIgnored = 0
 
+        sigID = 1
+
         class Sig:
             pass
         sigs = []
+        
+        # Get all .asc files in subsubdirs 
+        files = glob(data_dir+'/**/*/*.asc', recursive=True)
+        print(len(files))
 
-        for f in glob(data_dir + '/*spectrum.txt'):
-            if f in filesToIgnore:
-                numIgnored += 1
-                continue
-            print('Importing %s.' % f)
-            numFiles += 1
-            sig = self.read_file(f)
-            s = sig.sample
-            if s['particle size'].lower == 'liquid':
-                phase = 'liquid'
-            else:
-                phase = 'solid'
-            if 'sample no.' in s:
-                sampleNum = s['sample no.']
-            else:
-                sampleNum = ''
-            id = self._add_sample(
-                s['name'], s['type'], s['class'], s[
-                    'subclass'], s['particle size'],
-                sampleNum, s['owner'], s['origin'], phase, s['description'])
+        for f in range(len(files)):
+            print('Importing %s.' % files[f])
+            try:
+                sig = self.read_file(files[f])
+                s = sig.sample
+                sampleNum = s['relab_id']
+            except:
+                raise Exception ('Error creating SIG' % (files[f]))
 
-            instrument = os.path.basename(f).split('.')[1]
+            phase = 'solid'
+            s['type'] = "manmade_natural"
+            s['class'] = " "
+            s['subclass'] = " "
+            s['particle size'] = " "
+            s['owner'] = " "
+            s['origin'] = "RELab"
+            try:
+                idd = self._add_sample(s['name'], s['type'], s['class'], s['subclass'], s['particle size'],
+                        sampleNum, s['owner'], s['origin'], phase, s['description'])
+            except:
+                raise Exception ('Error creating IDD')
+
+            instrument = os.path.basename(files[f]).split('.')[0]
             environment = 'lab'
             m = sig.measurement
 
-            # Correct numerous misspellings of "reflectance" and "transmittance"
+            # Correct numerous mispellings of "reflectance" and "transmittance"
+            m['y units'] = 'reflectance (percent)'
             yUnit = m['y units']
-            if yUnit.find('reflectence') > -1:
-                yUnit = 'reflectance (percent)'
-            elif yUnit.find('trans') == 0:
-                yUnit = 'transmittance (percent)'
-            measurement = m['measurement']
-            if measurement[0] == 't':
-                measurement = 'transmittance'
-            self._add_signature(id, -1, instrument, environment, measurement,
+            measurement = 'reflectance'
+            m['x units'] = 'wavelength (nm)'
+            try:
+                self._add_signature(idd, -1, instrument, environment, measurement,
                                 m['x units'], yUnit, m['first x value'],
                                 m['last x value'], sig.x, sig.y)
+            except:
+                raise Exception ('Error creating Signature')
+
         if numFiles == 0:
             print('No data files were found in directory "%s".' % data_dir)
         else:
@@ -311,7 +350,7 @@ class AsterDatabase(SpectralDatabase):
 
         Usage:
 
-            (x, y) = aster.get_spectrum(spectrumID)
+            (x, y) = relab.get_spectrum(spectrumID)
 
         Arguments:
 
@@ -331,7 +370,7 @@ class AsterDatabase(SpectralDatabase):
                 Spectrum data values for each band.
 
         Returns a pair of vectors containing the wavelengths and measured
-        values values of a measurement.  For additional metadata, call
+        values values of a measurment.  For additional metadata, call
         "get_signature" instead.
         '''
         import array
@@ -351,7 +390,7 @@ class AsterDatabase(SpectralDatabase):
 
         Usage::
 
-            sig = aster.get_signature(spectrumID)
+            sig = relab.get_signature(spectrumID)
 
         Arguments:
 
@@ -362,7 +401,7 @@ class AsterDatabase(SpectralDatabase):
 
         Returns:
 
-            `sig` (:class:`~spectral.database.aster.Signature`):
+            `sig` (:class:`~spectral.database.relab.Signature`):
 
                 An object with the following attributes:
 
@@ -407,11 +446,11 @@ class AsterDatabase(SpectralDatabase):
             `spectrumIDs` (list of ints):
 
                 List of **SpectrumID** values for of spectra in the "Spectra"
-                table of the ASTER database.
+                table of the relab database.
 
             `bandInfo` (:class:`~spectral.BandInfo`):
 
-                The spectral bands to which the original ASTER library spectra
+                The spectral bands to which the original relab library spectra
                 will be resampled.
 
         Returns:
@@ -419,15 +458,16 @@ class AsterDatabase(SpectralDatabase):
             A :class:`~spectral.io.envi.SpectralLibrary` object.
 
         The IDs passed to the method should correspond to the SpectrumID field
-        of the ASTER database "Spectra" table.  All specified spectra will be
+        of the relab database "Spectra" table.  All specified spectra will be
         resampled to the same discretization specified by the bandInfo
         parameter. See :class:`spectral.BandResampler` for details on the
         resampling method used.
         '''
         from spectral.algorithms.resampling import BandResampler
         from spectral.io.envi import SpectralLibrary
+        import numpy
         import unicodedata
-        spectra = np.empty((len(spectrumIDs), len(bandInfo.centers)))
+        spectra = numpy.empty((len(spectrumIDs), len(bandInfo.centers)))
         names = []
         for i in range(len(spectrumIDs)):
             sig = self.get_signature(spectrumIDs[i])

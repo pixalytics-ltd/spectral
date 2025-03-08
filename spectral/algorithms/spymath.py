@@ -38,7 +38,6 @@ def matrix_sqrt(X=None, symmetric=False, inverse=False, eigs=None):
         (vals, V) = eigs
     else:
         (vals, V) = np.linalg.eig(X)
-    k = len(vals)
     if inverse is False:
         SRV = np.diag(np.sqrt(vals))
     else:
@@ -68,7 +67,7 @@ def get_histogram_cdf_points(data, cdf_vals, ignore=None, mask=None):
         `ignore` (numeric, default `None`):
 
             A scalar value that should be ignored when computing histogram
-            points (e.g., a value that indicates bad data). If this valus is
+            points (e.g., a value that indicates bad data). If this value is
             not specified, all data are used.
 
     Return value:
@@ -88,5 +87,3 @@ def get_histogram_cdf_points(data, cdf_vals, ignore=None, mask=None):
     isort = np.argsort(data)
     N = len(data)
     return [data[isort[int(x * (N - 1))]] for x in cdf_vals]
-
-

@@ -6,10 +6,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 import math
-import numpy
 import numpy as np
-
-from warnings import warn
 
 import spectral as spy
 from .algorithms import GaussianStats, ImageIterator
@@ -18,6 +15,7 @@ from .perceptron import Perceptron
 
 __all__ = ('GaussianClassifier', 'MahalanobisDistanceClassifier',
            'PerceptronClassifier')
+
 
 class Classifier(object):
     '''
@@ -150,9 +148,9 @@ class GaussianClassifier(SupervisedClassifier):
         for (i, cl) in enumerate(self.classes):
             delta = (x - cl.stats.mean)
             scores[i] = math.log(cl.class_prob) - 0.5 * cl.stats.log_det_cov \
-               - 0.5 * delta.dot(cl.stats.inv_cov).dot(delta)
+              - 0.5 * delta.dot(cl.stats.inv_cov).dot(delta)
         return self.classes[np.argmax(scores)].index
-            
+
     def classify_image(self, image):
         '''Classifies an entire image, returning a classification map.
 
@@ -217,7 +215,7 @@ class MahalanobisDistanceClassifier(GaussianClassifier):
         '''
         GaussianClassifier.train(self, trainingData)
 
-        covariance = numpy.zeros(self.classes[0].stats.cov.shape, numpy.float)
+        covariance = np.zeros(self.classes[0].stats.cov.shape, float)
         nsamples = np.sum(cl.stats.nsamples for cl in self.classes)
         for cl in self.classes:
             covariance += (cl.stats.nsamples / float(nsamples)) * cl.stats.cov
@@ -286,7 +284,7 @@ class PerceptronClassifier(Perceptron, SupervisedClassifier):
     '''A multi-layer perceptron classifier with backpropagation learning.
 
     Multi-layer perceptrons often require many (i.e., thousands) of iterations
-    through the traning data to converge on a solution. Therefore, it is not
+    through the training data to converge on a solution. Therefore, it is not
     recommended to attempt training a network on full-dimensional hyperspectral
     data or even on a full set of image pixels. It is likely preferable to
     first train the network on a subset of the data, then retrain the network
@@ -302,7 +300,7 @@ class PerceptronClassifier(Perceptron, SupervisedClassifier):
         >>> classes = create_training_classes(xdata, gt)
         >>> nfeatures = xdata.shape[-1]
         >>> nclasses = len(classes)
-        >>> 
+        >>>
         >>> p = PerceptronClassifier([nfeatures, 20, 8, nclasses])
         >>> p.train(classes, 20, clip=0., accuracy=100., batch=1,
         >>>         momentum=0.3, rate=0.3)
@@ -408,8 +406,8 @@ class PerceptronClassifier(Perceptron, SupervisedClassifier):
                 if class_data[i].shape[0] > samples_per_class:
                     class_data[i] = class_data[i][:samples_per_class]
         X = np.vstack(class_data)
-        y = np.hstack([np.ones(c.shape[0], dtype=np.int16) * i for \
-                      (i, c) in enumerate(class_data)])
+        y = np.hstack([np.ones(c.shape[0], dtype=np.int16) * i for
+                       (i, c) in enumerate(class_data)])
         Y = np.eye(np.max(y) + 1, dtype=np.int16)[y]
 
         if 'stdout' in kwargs:
@@ -442,4 +440,3 @@ class PerceptronClassifier(Perceptron, SupervisedClassifier):
 
     def classify(self, X, **kwargs):
         return Classifier.classify(self, X, **kwargs)
-

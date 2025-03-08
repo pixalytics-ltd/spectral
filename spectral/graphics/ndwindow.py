@@ -6,10 +6,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import math
 import numpy as np
-import os
 from pprint import pprint
 import random
-import time
 
 try:
     import wx
@@ -19,8 +17,7 @@ except ImportError:
 
 from .. import settings
 from ..config import spy_colors
-from .colorscale import ColorScale
-from .spypylab import ImageView, MplCallback, SpyMplEvent
+from .spypylab import ImageView, SpyMplEvent
 from .graphics import WindowProxy
 
 DEFAULT_WIN_SIZE = (500, 500)           # Default dimensions of image frame
@@ -43,6 +40,7 @@ def xyz_to_rtp(x, y, z):
         phi += 180
     theta = math.acos(z / r) * 180. / math.pi
     return [r, theta, phi]
+
 
 (DOWN, UP) = (1, 0)
 
@@ -67,8 +65,8 @@ class MouseHandler:
             if wx.GetKeyState(wx.WXK_CONTROL) and wx.GetKeyState(wx.WXK_SHIFT):
                 # Display the row/col and class of the selected pixel.
                 (x, y) = self.position
-                cmd = lambda: self.window.get_pixel_info(
-                    x, self.window.size[1] - y)
+                def cmd():
+                    return self.window.get_pixel_info(x, self.window.size[1] - y)
                 self.window.add_display_command(cmd)
                 self.window.canvas.SetCurrent(self.window.canvas.context)
                 self.window.canvas.Refresh()
@@ -106,7 +104,6 @@ class MouseHandler:
         '''Handles panning & zooming for mouse click+drag events.'''
         if DOWN not in (self.left, self.right):
             return
-        #print 'Mouse movement:', x, y
         (w, h) = self.window.size
         dx = event.X - self.position[0]
         dy = event.Y - self.position[1]
@@ -120,7 +117,6 @@ class MouseHandler:
                 self.window.camera_pos_rtp[2] -= xangle
             elif self.left == DOWN:
                 # Mouse movement pans target position in the plane of window
-                camera_pos = np.array(rtp_to_xyz(*self.window.camera_pos_rtp))
                 view_vec = -np.array(rtp_to_xyz(*self.window.camera_pos_rtp))
                 zhat = np.array([0.0, 0.0, 1.0])
                 right = -np.cross(zhat, view_vec)
@@ -148,15 +144,17 @@ class MouseHandler:
         R = self.window.size[1]
         self.window._selection_box = (xmin, R - ymax, xmax, R - ymin)
 
+
 class MouseMenu(wx.Menu):
     '''Right-click menu for reassigning points to different classes.'''
     ids = []
+
     def __init__(self, window):
         super(MouseMenu, self).__init__(title='Assign to class')
         self.window = window
         self.id_classes = {}
         while len(self.ids) < self.window.max_menu_class + 1:
-            self.ids.append( wx.NewId())
+            self.ids.append(wx.NewId())
         for i in range(self.window.max_menu_class + 1):
             id = self.ids[i]
             self.id_classes[id] = i
@@ -168,6 +166,7 @@ class MouseMenu(wx.Menu):
     def reassign_points(self, event):
         i = self.id_classes[event.GetId()]
         self.window.post_reassign_selection(i)
+
 
 # Multipliers for projecting data into each 3D octant
 octant_coeffs = np.array([
@@ -183,10 +182,10 @@ octant_coeffs = np.array([
 
 def create_mirrored_octants(feature_indices):
     '''Takes a list of 6 integers and returns 8 lists of feature index
-    triplets. The 6 indices passed each specify a feature to be associatd with
+    triplets. The 6 indices passed each specify a feature to be associated with
     a semi-axis in the 3D display.  Each of the 8 returned triplets specifies
     the 3 features associated with  particular octant, starting with the
-    positive x,y,z octant, proceding counterclockwise around the z-axis then
+    positive x,y,z octant, proceeding counterclockwise around the z-axis then
     similarly for the negative half of the z-axis.
     '''
     f = feature_indices
@@ -259,11 +258,11 @@ class NDWindowProxy(WindowProxy):
 
             #. If `mode` is set to "independent", then `features` must be a
                length-8 list of length-3 lists of integers. In this case, each
-               length-3 list specfies the features to be displayed in a single
+               length-3 list specifies the features to be displayed in a single
                octants (the same semi-axis can be associated with different
                features in different octants).  Octants are ordered starting
-               with the postive x,y,z octant and procede counterclockwise
-               around the z-axis, then procede similarly around the negative
+               with the positive x,y,z octant and proceed counterclockwise
+               around the z-axis, then proceed similarly around the negative
                half of the z-axis.  An octant triplet can be specified as None
                instead of a list, in which case nothing will be rendered in
                that octant.
@@ -286,6 +285,7 @@ class NDWindowProxy(WindowProxy):
         `ImageView` constructor. Return value is the ImageView object.
         '''
         return self._window.view_class_image(*args, **kwargs)
+
 
 class NDWindow(wx.Frame):
     '''A widow class for displaying N-dimensional data points.'''
@@ -356,7 +356,6 @@ class NDWindow(wx.Frame):
         from matplotlib.cbook import CallbackRegistry
         self.callbacks = CallbackRegistry()
 
-
     def on_event_close(self, event=None):
         pass
 
@@ -387,7 +386,7 @@ class NDWindow(wx.Frame):
             classes (numpy.ndarray):
                 An RxC array of integer class labels (zeros means unassigned).
             features (list):
-                Indices of feautures to display in the octant (see
+                Indices of features to display in the octant (see
                 NDWindow.set_octant_display_features for description).
         '''
         import OpenGL.GL as gl
@@ -395,8 +394,10 @@ class NDWindow(wx.Frame):
             from OpenGL.GL import glGetIntegerv
         except:
             from OpenGL.GL.glget import glGetIntegerv
+            pass
 
-        classes = kwargs.get('classes', None)
+#        if 'classes' in kwargs:
+#            self.classes = kwargs.get('classes', None)
         features = kwargs.get('features', list(range(6)))
         if self.data.shape[2] < 6:
             features = features[:3]
@@ -454,11 +455,11 @@ class NDWindow(wx.Frame):
             (in that order).  Each octant will display data points using the
             features associated with the 3 semi-axes for that octant.
         A length-8 list of length-3 lists of integers:
-            In this case, each length-3 list specfies the features to be
+            In this case, each length-3 list specifies the features to be
             displayed in a single octants (the same semi-axis can be associated
             with different features in different octants).  Octants are ordered
-            starting with the postive x,y,z octant and procede counterclockwise
-            around the z-axis, then procede similarly around the negative half
+            starting with the positive x,y,z octant and proceed counterclockwise
+            around the z-axis, then proceed similarly around the negative half
             of the z-axis.  An octant triplet can be specified as None instead
             of a list, in which case nothing will be rendered in that octant.
         '''
@@ -673,7 +674,7 @@ class NDWindow(wx.Frame):
         color, then reassigning them. Since pixels can block others in the
         z-buffer, this method iteratively reassigns pixels by removing any
         reassigned pixels from the display list, then reassigning again,
-        repeating until there are no more pixels in the selction box.
+        repeating until there are no more pixels in the selection box.
         '''
         nreassigned_tot = 0
         i = 1
@@ -698,7 +699,7 @@ class NDWindow(wx.Frame):
 #                 % (i, nreassigned, new_class)
             print('.', end=' ')
             i += 1
-        print('\n%d points were reasssigned to class %d.' \
+        print('\n%d points were reasssigned to class %d.'
               % (nreassigned_tot, new_class))
         self._selection_box = None
         if nreassigned_tot > 0 and new_class == self.max_menu_class:
@@ -829,6 +830,7 @@ class NDWindow(wx.Frame):
             gl.glRasterPos3f(x, y, z)
             glut.glutBitmapString(glut.GLUT_BITMAP_HELVETICA_18,
                                   str(label))
+
         def label_axis_for_feature(x, y, z, feature_ind):
             feature = self.octant_features[feature_ind[0]][feature_ind[1]]
             label_axis(x, y, z, self.labels[feature])
@@ -961,7 +963,7 @@ class NDWindow(wx.Frame):
             self._show_unassigned = not self._show_unassigned
             print('SHOW UNASSIGNED =', self._show_unassigned)
             self._refresh_display_lists = True
- 
+
         self.canvas.Refresh()
 
     def update_window_title(self):

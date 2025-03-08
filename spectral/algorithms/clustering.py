@@ -8,8 +8,8 @@ import logging
 import numpy as np
 
 import spectral as spy
-from .classifiers import Classifier
 from ..utilities.errors import has_nan, NaNValueError
+
 
 def L1(v1, v2):
     'Returns L1 distance between 2 rank-1 arrays.'
@@ -72,7 +72,7 @@ def kmeans(image, nclusters=10, max_iterations=20, **kwargs):
 
         `class_map` (:class:`numpy.ndarray`):
 
-            An `MxN` array whos values are the indices of the cluster for the
+            An `MxN` array who's values are the indices of the cluster for the
             corresponding element of `image`.
 
         `centers` (:class:`numpy.ndarray`):
@@ -250,7 +250,7 @@ def kmeans_ndarray(image, nclusters=10, max_iterations=20, **kwargs):
 
         `class_map` (:class:`numpy.ndarray`):
 
-            An `MxN` array whos values are the indices of the cluster for the
+            An `MxN` array who's values are the indices of the cluster for the
             corresponding element of `image`.
 
         `centers` (:class:`numpy.ndarray`):
@@ -360,4 +360,3 @@ def kmeans_ndarray(image, nclusters=10, max_iterations=20, **kwargs):
     logger.info('kmeans terminated with %d clusters after %d iterations.',
                 len(set(old_clusters.ravel())), itnum - 1)
     return (old_clusters.reshape(nrows, ncols), centers)
-
